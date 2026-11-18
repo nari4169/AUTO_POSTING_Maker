@@ -1,0 +1,55 @@
+# =============================================================================
+#  crontab 예시 — `crontab -e` 로 열어서 아래 내용을 (경로를 바꿔서) 붙여 넣으세요.
+#  파이의 시간대가 한국이어야 합니다:  sudo timedatectl set-timezone Asia/Seoul
+#
+#  형식:  분 시 일 월 요일  명령      (요일: 0=일요일 … 6=토요일)
+#  ./cron/run.sh 가 실행 권한이 필요합니다:  chmod +x cron/run.sh
+#  APP 경로의 pi 는 본인 사용자명으로 바꾸세요.
+# =============================================================================
+
+SHELL=/bin/bash
+APP=/home/pi/autopost
+
+# 실패 알림은 run.sh 가 .env 의 SMTP 설정으로 보냅니다. (cron 자체 메일을 쓰려면 아래 줄의 주석을 풀고 주소를 바꾸세요)
+# MAILTO=you@example.com
+
+# ───────────── 하루 시간표 (겹치지 않게 분산) ─────────────
+#  03:00 일   Threads 토큰 갱신
+#  03:10 월   Instagram 토큰 갱신
+#  03:30 매일 게시 기록 백업
+#  */6h       생존 신고
+#  08:50      네이버 로그인 점검
+#  09:07 13:07 18:07  Threads 게시          (가벼움)
+#  09:20 17:20        네이버 블로그 게시     (브라우저 — 메모리 많이 씀)
+#  10:20 19:20        릴스 제작·게시         (ffmpeg — CPU·메모리 많이 씀)
+#  16:30      Threads 댓글 답글
+#  21:30      일일 현황 메일
+
+# ── 토큰 갱신 (60일 만료 방지) ──
+0 3 * * 0         $APP/cron/run.sh threads.token_refresh --save
+10 3 * * 1        $APP/cron/run.sh reels.token_tool refresh --save
+
+# ── 백업 · 생존 신고 ──
+30 3 * * *        $APP/cron/run.sh tools.backup
+0 */6 * * *       $APP/cron/run.sh tools.heartbeat
+
+# ── 네이버 로그인 세션 점검 (풀렸으면 알림 메일) ──
+50 8 * * *        $APP/cron/run.sh naver.login_setup --check
+
+# ── Threads: 하루 3번, 1건씩 ──
+7 9,13,18 * * *   $APP/cron/run.sh threads.post_threads --count 1
+
+# ── 네이버 블로그: 하루 2번, 1건씩 ──
+20 9,17 * * *     $APP/cron/run.sh naver.post_naver --count 1
+
+# ── 릴스: 하루 2번 ──
+20 10,19 * * *    $APP/cron/run.sh reels.post_reels --count 1
+
+# ── Threads 내 글의 댓글에 답글 ──
+30 16 * * *       $APP/cron/run.sh threads.reply_comments --posts 5 --max-replies 10
+
+# ── 일일 현황 메일 ──
+30 21 * * *       $APP/cron/run.sh tools.status --mail
+
+# 팁) 브라우저(네이버)와 영상 제작(릴스)이 동시에 돌면 파이의 메모리가 부족해질 수 있습니다.
+#     위 시간표처럼 두 작업의 시작 시각을 1시간 이상 떨어뜨리세요.

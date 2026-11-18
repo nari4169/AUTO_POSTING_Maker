@@ -1,0 +1,17 @@
+# 비밀값 / 세션 / 실행 기록 — 절대 공유하지 마세요
+.env
+data/
+logs/
+*.db
+naver_state.json
+
+# 파이썬
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/

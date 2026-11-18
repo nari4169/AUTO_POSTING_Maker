@@ -1,0 +1,21 @@
+# 공통
+requests>=2.31,<3
+python-dotenv>=1.0,<2
+
+# AI 문구 생성 (Gemini → Groq 폴백). AI 를 안 쓰면 없어도 동작합니다.
+google-genai>=1.0,<2
+openai>=1.40,<2
+
+# Reels 영상 제작 (ffmpeg 는 pip 가 아니라 시스템에 설치: sudo apt install ffmpeg)
+gTTS>=2.5,<3
+
+# 릴스 영상 임시 업로드(REELS_UPLOAD_MODE=s3) — R2/S3 를 안 쓰면 없어도 됩니다.
+boto3>=1.34
+
+# 네이버 블로그 (설치 후 `playwright install chromium` 한 번 필요)
+playwright>=1.49
+
+# RSS 글감(SOURCE_TYPE=rss) 은 표준 라이브러리만 사용합니다.
+
+# 테스트용
+pytest>=8
