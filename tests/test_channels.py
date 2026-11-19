@@ -198,3 +198,48 @@ def test_telegram_api_error_marks_failed(monkeypatch, tmp_path):
     s = PostStore("telegram")
     assert s.get("a2")["status"] == "failed"
     s.close()
+
+
+# ── 브라우저 대체 실행 ───────────────────────────────────────
+class _FakeChromium:
+    def __init__(self, fail_default=False):
+        self.fail_default, self.calls = fail_default, []
+
+    def launch(self, **kw):
+        self.calls.append(kw)
+        if self.fail_default and "executable_path" not in kw:
+            raise Exception("BrowserType.launch: Executable doesn't exist at /root/.cache/ms-playwright/x")
+        return "browser"
+
+
+class _FakePW:
+    def __init__(self, **kw):
+        self.chromium = _FakeChromium(**kw)
+
+
+def test_launch_uses_playwright_default(monkeypatch):
+    from naver.browser import launch_browser
+    monkeypatch.delenv("NAVER_BROWSER_PATH", raising=False)
+    p = _FakePW()
+    assert launch_browser(p, headless=False) == "browser" and p.chromium.calls == [{"headless": False}]
+
+
+def test_launch_falls_back_to_system_chromium(monkeypatch):
+    from naver import browser
+    monkeypatch.delenv("NAVER_BROWSER_PATH", raising=False)
+    monkeypatch.setattr(browser.shutil, "which", lambda n: "/usr/bin/chromium" if n == "chromium" else None)
+    p = _FakePW(fail_default=True)
+    assert browser.launch_browser(p, headless=True) == "browser"
+    assert p.chromium.calls[-1] == {"executable_path": "/usr/bin/chromium", "headless": True}
+
+
+def test_launch_explicit_path_and_no_browser_message(monkeypatch):
+    from naver import browser
+    monkeypatch.setenv("NAVER_BROWSER_PATH", "/opt/chrome/chrome")
+    p = _FakePW()
+    browser.launch_browser(p, headless=True)
+    assert p.chromium.calls == [{"executable_path": "/opt/chrome/chrome", "headless": True}]
+    monkeypatch.delenv("NAVER_BROWSER_PATH")
+    monkeypatch.setattr(browser.shutil, "which", lambda n: None)
+    with pytest.raises(RuntimeError, match="chromium"):
+        browser.launch_browser(_FakePW(fail_default=True), headless=True)

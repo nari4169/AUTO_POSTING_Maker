@@ -26,6 +26,7 @@ from common.notify import send_mail
 from common.sources import get_items, pick_items
 from common.store import AlreadyHandled, PendingConflict, PostStore
 
+from .browser import launch_browser
 from .compose import BlogPost, build_post
 from .login_setup import state_path
 
@@ -217,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
 
         with sync_playwright() as p:
             headless = env_bool("NAVER_HEADLESS", False) and not args.dry_run
-            browser = p.chromium.launch(headless=headless)
+            browser = launch_browser(p, headless=headless)
             context = browser.new_context(storage_state=str(path), locale="ko-KR",
                                           viewport={"width": 1280, "height": 900})
             try:

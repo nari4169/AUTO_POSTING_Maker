@@ -15,6 +15,7 @@ import sys
 from common.config import data_dir
 
 from . import post_naver as pn
+from .browser import launch_browser
 from .login_setup import state_path
 
 JS_BUTTONS = """
@@ -46,7 +47,7 @@ def main() -> int:
         "복구 팝업 취소": pn.POPUP_CANCEL_SELECTORS, "도움말 닫기": pn.HELP_CLOSE_SELECTORS,
     }
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = launch_browser(p, headless=False)
         context = browser.new_context(storage_state=str(path), locale="ko-KR", viewport={"width": 1280, "height": 900})
         page = context.new_page()
         page.goto(f"https://blog.naver.com/{blog_id}?Redirect=Write", wait_until="domcontentloaded")

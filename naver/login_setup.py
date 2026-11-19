@@ -17,6 +17,8 @@ import time
 
 from common.config import env, resolve_path
 
+from .browser import launch_browser
+
 LOGIN_URL = "https://nid.naver.com/nidlogin.login"
 CHECK_URL = "https://nid.naver.com/user2/help/myInfoV2?lang=ko_KR"
 
@@ -53,14 +55,14 @@ def main(argv: list[str] | None = None) -> int:
             if not path.exists():
                 print("저장된 세션이 없습니다. `python -m naver.login_setup` 으로 먼저 로그인하세요.")
                 return 2
-            browser = p.chromium.launch(headless=True)
+            browser = launch_browser(p, headless=True)
             context = browser.new_context(storage_state=str(path), locale="ko-KR")
             ok = is_logged_in(context.new_page())
             browser.close()
             print("로그인 상태입니다." if ok else "로그인이 풀렸습니다. 다시 로그인해 주세요.")
             return 0 if ok else 2
 
-        browser = p.chromium.launch(headless=False)
+        browser = launch_browser(p, headless=False)
         context = browser.new_context(locale="ko-KR", viewport={"width": 1280, "height": 900})
         page = context.new_page()
         page.goto(LOGIN_URL)
