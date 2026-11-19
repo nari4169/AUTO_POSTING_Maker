@@ -22,11 +22,12 @@ from common.config import ConfigError, require, update_env_file
 
 SCOPES = "threads_basic,threads_content_publish,threads_manage_replies,threads_read_replies"
 AUTH_URL = "https://threads.com/oauth/authorize"
+AUTH_URL_ALT = "https://threads.net/oauth/authorize"   # 예전 주소(문서의 주소와 다르게 동작하는 환경이 있어 대안으로 함께 출력)
 TOKEN_URL = "https://graph.threads.com/oauth/access_token"
 LONG_URL = "https://graph.threads.com/access_token"
 
 
-def build_auth_url() -> str:
+def build_auth_url(auth_url: str = AUTH_URL) -> str:
     cfg = require("THREADS_APP_ID", "THREADS_REDIRECT_URI")
     query = urlencode(
         {
@@ -36,14 +37,24 @@ def build_auth_url() -> str:
             "response_type": "code",
         }
     )
-    return f"{AUTH_URL}?{query}"
+    return f"{auth_url}?{query}"
 
 
 def extract_code(redirect_url_or_code: str) -> str:
-    value = redirect_url_or_code.strip()
-    if "code=" in value:
+    """허용 후 이동된 주소(또는 code 값)에서 인증 코드를 꺼낸다. 잘못된 주소면 이유를 알려 준다."""
+    value = redirect_url_or_code.strip().strip("\"'")
+    if value.lower().startswith(("http://", "https://")):
         qs = parse_qs(urlparse(value).query)
+        if "error" in qs or "error_description" in qs:
+            reason = (qs.get("error_description") or qs.get("error") or [""])[0]
+            raise RuntimeError(f"인증이 거절/실패했습니다: {reason}")
         code = (qs.get("code") or [""])[0]
+        if not code:
+            raise RuntimeError(
+                "이 주소에는 인증 코드(code=...)가 없습니다.\n"
+                "  · 지금 붙여 넣은 것은 '로그인·허용용 주소(auth-url 이 출력한 주소)'일 수 있습니다.\n"
+                "  · 그 주소를 브라우저에서 열어 [허용]을 누른 뒤, 이동된 페이지의 **주소창 전체**(…?code=… 가 붙은 주소)를 붙여 넣으세요."
+            )
     else:
         code = value
     return code.split("#")[0]  # 주소 끝의 '#_' 제거
@@ -96,6 +107,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "auth-url":
             print("아래 주소를 브라우저에서 열어 로그인/허용하세요:\n")
             print(build_auth_url())
+            print("\n--- 위 주소에서 승인 오류가 나면 아래 대안 주소(예전 도메인)로 열어 보세요 ---\n")
+            print(build_auth_url(AUTH_URL_ALT))
+            print("\n[점검] client_id=" + require("THREADS_APP_ID")["THREADS_APP_ID"] + " ← Meta 앱의 'Threads 앱 ID'(일반 앱 ID 가 아님)와 같아야 합니다.")
+            print("       redirect_uri=" + require("THREADS_REDIRECT_URI")["THREADS_REDIRECT_URI"] + " ← 앱 설정에 등록한 값과 똑같아야 합니다.")
             return 0
         token, user_id, expires = exchange(extract_code(args.redirect_url))
         print(f"발급 성공: user_id={user_id}, 유효기간 약 {expires // 86400}일")

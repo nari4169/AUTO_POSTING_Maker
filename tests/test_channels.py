@@ -243,3 +243,27 @@ def test_launch_explicit_path_and_no_browser_message(monkeypatch):
     monkeypatch.setattr(browser.shutil, "which", lambda n: None)
     with pytest.raises(RuntimeError, match="chromium"):
         browser.launch_browser(_FakePW(fail_default=True), headless=True)
+
+
+def test_auth_url_has_client_id_and_alt_domain(monkeypatch):
+    from urllib.parse import parse_qs, urlparse
+    from threads import oauth_helper as oh
+    monkeypatch.setenv("THREADS_APP_ID", "123456")
+    monkeypatch.setenv("THREADS_REDIRECT_URI", "https://example.com/cb/")
+    for url, host in ((oh.build_auth_url(), "threads.com"), (oh.build_auth_url(oh.AUTH_URL_ALT), "threads.net")):
+        u = urlparse(url)
+        q = parse_qs(u.query)
+        assert u.netloc == host and q["client_id"] == ["123456"] and q["redirect_uri"] == ["https://example.com/cb/"]
+        assert "threads_content_publish" in q["scope"][0] and q["response_type"] == ["code"]
+
+
+def test_extract_code_variants_and_helpful_errors():
+    from threads.oauth_helper import extract_code
+    assert extract_code("https://e.com/cb?code=AQBxyz#_") == "AQBxyz"
+    assert extract_code('"https://e.com/cb?code=AQBxyz#_"') == "AQBxyz"      # 따옴표가 붙어 있어도
+    assert extract_code("AQBxyz#_") == "AQBxyz"                              # code 값만 붙여 넣어도
+    auth = "https://threads.com/oauth/authorize?client_id=1&redirect_uri=x&scope=a&response_type=code"
+    with pytest.raises(RuntimeError, match="인증 코드"):
+        extract_code(auth)                                                    # auth-url 주소를 잘못 붙여 넣은 경우
+    with pytest.raises(RuntimeError, match="거절"):
+        extract_code("https://e.com/cb?error=access_denied&error_description=User+denied")
