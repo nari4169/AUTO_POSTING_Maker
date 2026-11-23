@@ -165,9 +165,12 @@ def build_video(
     _run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "video_only.mp4"], cwd=work)
 
     # 3) 오디오 + 자막 합성 (자막 파일은 work 폴더 기준 상대경로로 지정해 OS 별 경로 문제를 피함)
-    style = (f"FontName={font},FontSize=64,Alignment=2,MarginV=380,Outline=3,Shadow=0,"
-             "PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&")
-    vf = f"subtitles=subs.srt:original_size={WIDTH}x{HEIGHT}:force_style='{style}'"
+    # SRT 자막의 style 숫자(글자 크기·여백·테두리)는 "세로 288 짜리 가상 화면" 기준 단위입니다(ffmpeg 기본값).
+    # 1080x1920 화면의 픽셀로 생각한 값을 그대로 넣으면 글자가 화면 밖으로 밀려나 자막이 안 보이므로 환산해서 넣습니다.
+    k = 288 / HEIGHT
+    style = (f"FontName={font},FontSize={round(64 * k)},Alignment=2,MarginV={round(380 * k)},"
+             f"Outline={max(1, round(3 * k))},Shadow=0,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&")
+    vf = f"subtitles=subs.srt:force_style='{style}'"
     _run(["ffmpeg", "-y", "-i", "video_only.mp4", "-i", "narration.mp3", "-vf", vf,
           "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
           "-shortest", "-movflags", "+faststart", str(out_path.resolve())], cwd=work)
