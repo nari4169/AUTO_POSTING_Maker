@@ -3,7 +3,8 @@
 Instagram API 의 릴스 게시는 기본적으로 `video_url`(인터넷에서 누구나 열 수 있는 영상 주소)을 요구합니다.
 그래서 만든 영상을 잠깐 어딘가에 올려 두고, 게시가 끝나면 지웁니다. 방식은 .env 의 REELS_UPLOAD_MODE 로 고릅니다.
 
-  s3          S3 호환 저장소(Cloudflare R2, AWS S3, Backblaze B2 등)에 올림  ← 권장
+  firebase    Firebase Storage(구글 클라우드 스토리지)에 올림  ← 권장. 서비스 계정 JSON 키 1개 + 버킷 이름만 있으면 됨
+  s3          S3 호환 저장소(Cloudflare R2, AWS S3, Backblaze B2 등)에 올림
   command     내가 정한 명령(rclone, scp 등)으로 올리고, 그 명령이 공개 URL 을 출력하게 함
   resumable   (실험적) 인스타그램에 파일을 직접 전송. 공식 문서상 Instagram 로그인 방식에서의 지원 여부가
               불확실하니 s3 가 안 될 때만 시도해 보세요. (이 모듈은 사용하지 않고 instagram_client 가 처리)
@@ -13,13 +14,14 @@ from __future__ import annotations
 import shlex
 import subprocess
 import uuid
+from datetime import timedelta
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
 from common.config import ConfigError, env, require
 
-MODES = ("s3", "command", "resumable")
+MODES = ("firebase", "s3", "command", "resumable")
 
 
 class HostingError(RuntimeError):
@@ -33,7 +35,7 @@ class Hosted:
 
 
 def upload_mode() -> str:
-    mode = (env("REELS_UPLOAD_MODE", "s3") or "s3").lower()
+    mode = (env("REELS_UPLOAD_MODE", "firebase") or "firebase").lower()
     if mode not in MODES:
         raise ConfigError(f"REELS_UPLOAD_MODE 는 {', '.join(MODES)} 중 하나여야 합니다: {mode!r}")
     return mode
@@ -41,11 +43,55 @@ def upload_mode() -> str:
 
 def host_video(path: Path, mode: str | None = None) -> Hosted:
     mode = mode or upload_mode()
+    if mode == "firebase":
+        return _host_firebase(path)
     if mode == "s3":
         return _host_s3(path)
     if mode == "command":
         return _host_command(path)
     raise HostingError(f"{mode} 방식은 공개 URL 업로드를 사용하지 않습니다.")
+
+
+# ── Firebase Storage (구글 클라우드 스토리지) ────────────────────────────────
+def _host_firebase(path: Path) -> Hosted:
+    cfg = require("FIREBASE_STORAGE_BUCKET", "FIREBASE_CREDENTIALS")
+    key_file = Path(cfg["FIREBASE_CREDENTIALS"]).expanduser()
+    if not key_file.is_file():
+        raise ConfigError(f"FIREBASE_CREDENTIALS 파일을 찾을 수 없습니다: {key_file}")
+    try:
+        from google.cloud import storage
+    except ImportError as e:  # pragma: no cover
+        raise HostingError("google-cloud-storage 가 설치돼 있지 않습니다: pip install google-cloud-storage") from e
+
+    bucket_name = cfg["FIREBASE_STORAGE_BUCKET"].removeprefix("gs://").strip("/")
+    if bucket_name.startswith("your-"):
+        raise ConfigError(
+            f"FIREBASE_STORAGE_BUCKET 이 예시 값({bucket_name})입니다. "
+            "Firebase 콘솔 > Storage 의 버킷 이름(gs:// 뒤의 값)으로 바꿔 주세요."
+        )
+    client = storage.Client.from_service_account_json(str(key_file))
+    bucket = client.bucket(bucket_name)
+    name = f"{env('FIREBASE_STORAGE_PREFIX', 'reels/')}{uuid.uuid4().hex[:12]}-{path.name}"
+    blob = bucket.blob(name)
+    try:
+        blob.upload_from_filename(str(path), content_type="video/mp4")
+    except Exception as e:  # noqa: BLE001 - 흔한 원인(버킷 이름 오타)을 쉬운 말로 알려 준다
+        if getattr(e, "code", None) == 404:
+            raise HostingError(
+                f"버킷 '{bucket_name}' 을(를) 찾을 수 없습니다. Firebase 콘솔 > Storage 에서 버킷 이름을 확인해 "
+                "FIREBASE_STORAGE_BUCKET 에 넣었는지, 키 파일이 같은 프로젝트의 것인지 확인하세요."
+            ) from e
+        raise
+    # 파일은 비공개로 두고, 1시간 동안만 열리는 서명된 주소를 만들어 인스타그램에 알려 준다.
+    url = blob.generate_signed_url(version="v4", expiration=timedelta(hours=1), method="GET")
+
+    def cleanup() -> None:
+        try:
+            blob.delete()
+        except Exception as e:  # noqa: BLE001 - 정리 실패가 게시 결과를 바꾸면 안 됨
+            print(f"[hosting] 임시 파일 삭제 실패(직접 지워 주세요): {name} ({e})")
+
+    return Hosted(url=url, cleanup=cleanup)
 
 
 # ── S3 호환 저장소 ────────────────────────────────────────────────────────────

@@ -4,6 +4,8 @@ data/
 logs/
 *.db
 naver_state.json
+*firebase*.json
+*-key.json
 
 # 파이썬
 .venv/

@@ -113,7 +113,7 @@ python -m pytest -q                                    # 자동 테스트
 6. 토큰 갱신(주 1회 cron 권장): `python -m reels.token_tool refresh --save`
 
 영상은 **이미지(없으면 단색 배경) + 나레이션(gTTS) + 자막**으로 만들어지는 1080×1920 세로 영상입니다.
-인스타그램은 영상을 **공개 주소(URL)** 로 가져가므로, 만든 영상을 잠깐 올려 둘 곳이 필요합니다. 기본은 S3 호환 저장소(`REELS_UPLOAD_MODE=s3`, Cloudflare R2/AWS S3 등)이고, 내가 정한 명령으로 올리는 `command` 방식도 있습니다(`reels/hosting.py`, `.env.example` 참고). `resumable` 은 실험적입니다. Meta 의 엔드포인트가 바뀌면 `reels/instagram_client.py` 를 조정하세요.
+인스타그램은 영상을 **공개 주소(URL)** 로 가져가므로, 만든 영상을 잠깐 올려 둘 곳이 필요합니다. 기본은 Firebase Storage(`REELS_UPLOAD_MODE=firebase`)이고, S3 호환 저장소(`s3`, Cloudflare R2/AWS S3 등)도 쓸 수 있으며, 내가 정한 명령으로 올리는 `command` 방식도 있습니다(`reels/hosting.py`, `.env.example` 참고). `resumable` 은 실험적입니다. Meta 의 엔드포인트가 바뀌면 `reels/instagram_client.py` 를 조정하세요.
 
 ### 5-3. 네이버 블로그
 

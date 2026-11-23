@@ -9,7 +9,8 @@ openai>=1.40,<2
 # Reels 영상 제작 (ffmpeg 는 pip 가 아니라 시스템에 설치: sudo apt install ffmpeg)
 gTTS>=2.5,<3
 
-# 릴스 영상 임시 업로드(REELS_UPLOAD_MODE=s3) — R2/S3 를 안 쓰면 없어도 됩니다.
+# 릴스 영상 임시 업로드 — firebase 방식(기본)은 google-cloud-storage, s3 방식은 boto3 를 씁니다(안 쓰는 쪽은 없어도 됩니다).
+google-cloud-storage>=2.16
 boto3>=1.34
 
 # 네이버 블로그 (설치 후 `playwright install chromium` 한 번 필요)

@@ -147,6 +147,72 @@ def test_hosting_command_must_print_url(monkeypatch, tmp_path):
         hosting.host_video(tmp_path / "a.mp4", "command")
 
 
+def test_hosting_firebase_signed_url_and_cleanup(monkeypatch, tmp_path):
+    import sys
+    import types
+    from reels import hosting
+
+    events = []
+
+    class Blob:
+        def __init__(self, name):
+            self.name = name
+        def upload_from_filename(self, path, content_type=None):
+            events.append(("upload", self.name, content_type))
+        def generate_signed_url(self, **kw):
+            events.append(("sign", kw["version"], kw["method"], kw["expiration"].total_seconds()))
+            return "https://storage.test/signed?x=1"
+        def delete(self):
+            events.append(("delete", self.name))
+
+    class Bucket:
+        def blob(self, name):
+            return Blob(name)
+
+    class Client:
+        @classmethod
+        def from_service_account_json(cls, path):
+            events.append(("auth", path))
+            return cls()
+        def bucket(self, name):
+            events.append(("bucket", name))
+            return Bucket()
+
+    google = types.ModuleType("google")
+    cloud = types.ModuleType("google.cloud")
+    storage = types.ModuleType("google.cloud.storage")
+    storage.Client = Client
+    cloud.storage = storage
+    google.cloud = cloud
+    monkeypatch.setitem(sys.modules, "google", google)
+    monkeypatch.setitem(sys.modules, "google.cloud", cloud)
+    monkeypatch.setitem(sys.modules, "google.cloud.storage", storage)
+
+    key = tmp_path / "k.json"
+    key.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("FIREBASE_CREDENTIALS", str(key))
+    monkeypatch.setenv("FIREBASE_STORAGE_BUCKET", "p.firebasestorage.app")
+    f = tmp_path / "a.mp4"
+    f.write_bytes(b"x")
+    h = hosting.host_video(f, "firebase")
+    assert h.url == "https://storage.test/signed?x=1"
+    assert ("bucket", "p.firebasestorage.app") in events
+    assert ("sign", "v4", "GET", 3600.0) in events
+    up = [e for e in events if e[0] == "upload"][0]
+    assert up[1].startswith("reels/") and up[1].endswith("-a.mp4") and up[2] == "video/mp4"
+    h.cleanup()
+    assert events[-1][0] == "delete" and events[-1][1] == up[1]
+
+
+def test_hosting_firebase_requires_settings(monkeypatch):
+    from common.config import ConfigError
+    from reels import hosting
+    monkeypatch.delenv("FIREBASE_CREDENTIALS", raising=False)
+    monkeypatch.delenv("FIREBASE_STORAGE_BUCKET", raising=False)
+    with pytest.raises(ConfigError):
+        hosting.host_video(__import__("pathlib").Path("a.mp4"), "firebase")
+
+
 def test_upload_mode_validation(monkeypatch):
     from common.config import ConfigError
     from reels import hosting
@@ -154,7 +220,7 @@ def test_upload_mode_validation(monkeypatch):
     with pytest.raises(ConfigError):
         hosting.upload_mode()
     monkeypatch.delenv("REELS_UPLOAD_MODE")
-    assert hosting.upload_mode() == "s3"
+    assert hosting.upload_mode() == "firebase"
 
 
 # ── 새 채널 예제(텔레그램) ───────────────────────────────────
