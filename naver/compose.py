@@ -4,10 +4,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from common import ai
-from common.config import env
+from common.disclosure import disclosure_text
 from common.sources import Item
 
-DEFAULT_DISCLOSURE = "이 포스팅은 제휴 마케팅 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받을 수 있습니다."
 
 
 @dataclass
@@ -39,7 +38,8 @@ def build_post(item: Item, *, use_ai: bool = True) -> BlogPost:
     parts = [body]
     if item.link:
         parts.append(f"자세히 보기: {item.link}")
-        parts.append(env("AD_DISCLOSURE", DEFAULT_DISCLOSURE) or DEFAULT_DISCLOSURE)
+        if disclosure_text(True):
+            parts.append(disclosure_text(True))
     if item.hashtags:
         parts.append(" ".join(f"#{t}" for t in item.hashtags))
     return BlogPost(title=title, body="\n\n".join(parts))

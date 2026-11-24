@@ -108,8 +108,25 @@ def get_items() -> list[Item]:
     raise ConfigError(f"SOURCE_TYPE 은 json 또는 rss 여야 합니다: {source!r}")
 
 
+def skip_reason(item_id: str, store) -> str:
+    """store.is_blocked 가 참인 항목이 왜 제외됐는지 한 줄로 설명한다."""
+    row = store.get(item_id)
+    if row is None:
+        return ""
+    status = row["status"]
+    if status == "published":
+        return "이미 게시함"
+    if status == "pending":
+        return "결과를 알 수 없는 pending 상태 — 실제로 올라갔는지 확인 후 `python -m tools.resolve_pending`"
+    err = (row["error"] or "").strip().replace(chr(10), " ")[:120]
+    return f"실패 {row['fail_count']}회로 자동 재시도 중단" + (f" ({err})" if err else "")
+
+
 def pick_items(items: list[Item], store, count: int) -> list[Item]:
-    """아직 게시하지 않았고 제외되지 않은 항목을 앞에서부터 count 개 고른다."""
+    """아직 게시하지 않았고 제외되지 않은 항목을 앞에서부터 count 개 고른다.
+
+    고를 항목이 하나도 없으면 "왜 건너뛰었는지"를 화면에 알려 준다(아무 말 없이 0건으로 끝나지 않도록).
+    """
     picked: list[Item] = []
     for item in items:
         if store.is_blocked(item.id):
@@ -117,4 +134,12 @@ def pick_items(items: list[Item], store, count: int) -> list[Item]:
         picked.append(item)
         if len(picked) >= count:
             break
+    if not picked:
+        if not items:
+            print("[알림] 글감이 없습니다. CONTENT_FILE(.env) 이 가리키는 파일에 항목이 있는지 확인하세요.")
+        else:
+            print(f"[알림] 게시할 새 글감이 없습니다. 글감 {len(items)}건이 모두 제외됐습니다:")
+            for item in items:
+                print(f"  - {item.id}: {skip_reason(item.id, store)}")
+            print("  → 새 글감을 추가(id 는 겹치지 않게)하거나, 실패 기록을 정리하세요. 현황: python -m tools.status")
     return picked

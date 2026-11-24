@@ -10,11 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from common import ai
-from common.config import env
+from common.disclosure import disclosure_text
 from common.sources import Item
 
 MAX_POST_LENGTH = 500
-DEFAULT_DISCLOSURE = "이 포스팅은 제휴 마케팅 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받을 수 있습니다."
 
 
 @dataclass
@@ -24,7 +23,7 @@ class PostContent:
 
 
 def disclosure() -> str:
-    return env("AD_DISCLOSURE", DEFAULT_DISCLOSURE) or DEFAULT_DISCLOSURE
+    return disclosure_text(True)
 
 
 def _tail(item: Item) -> str:
@@ -95,8 +94,10 @@ def build_post(item: Item, *, use_ai: bool = True) -> PostContent:
         if item.title:
             lines.append(item.title)
         lines.append(item.link)
-        lines.append("")
-        lines.append(disclosure())
+        notice = disclosure()
+        if notice:
+            lines.append("")
+            lines.append(notice)
         reply = "\n".join(lines)
         reply = _fit(reply, MAX_POST_LENGTH)
     return PostContent(body=body, reply=reply)

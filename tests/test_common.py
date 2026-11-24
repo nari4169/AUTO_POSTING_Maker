@@ -143,3 +143,17 @@ def test_heartbeat_skips_without_url(monkeypatch, capsys):
     monkeypatch.delenv("HEALTHCHECK_URL", raising=False)
     from tools.heartbeat import main
     assert main() == 0
+
+
+def test_pick_items_explains_why_empty(store, capsys):
+    items = [Item(id="a", title="t"), Item(id="b", title="t")]
+    store.reserve("a")
+    store.mark_published("a", "m")
+    for _ in range(3):
+        store.reserve("b")
+        store.mark_failed("b", "토큰 오류")
+    assert pick_items(items, store, 1) == []
+    out = capsys.readouterr().out
+    assert "a: 이미 게시함" in out and "b: 실패 3회" in out and "토큰 오류" in out
+    assert pick_items([], store, 1) == []
+    assert "글감이 없습니다" in capsys.readouterr().out

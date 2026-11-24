@@ -16,6 +16,7 @@ from pathlib import Path
 
 from common import ai
 from common.config import ConfigError, data_dir, env, env_int, require, resolve_path
+from common.disclosure import disclosure_text
 from common.notify import send_mail
 from common.sources import Item, get_items, pick_items
 from common.store import AlreadyHandled, DailyLimitReached, PendingConflict, PostStore
@@ -25,7 +26,6 @@ from .instagram_client import InstagramClient, InstagramError
 from .make_video import VideoError, build_video, download_image
 
 CHANNEL = "reels"
-DEFAULT_DISCLOSURE = "이 포스팅은 제휴 마케팅 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받을 수 있습니다."
 
 
 def script_for(item: Item, use_ai: bool) -> str:
@@ -45,7 +45,8 @@ def caption_for(item: Item, script: str) -> str:
     parts = [item.title or script]
     if item.link:
         parts.append(item.link)
-        parts.append(env("AD_DISCLOSURE", DEFAULT_DISCLOSURE) or DEFAULT_DISCLOSURE)
+        if disclosure_text(True):
+            parts.append(disclosure_text(True))
     if item.hashtags:
         parts.append(" ".join(f"#{t}" for t in item.hashtags[:5]))
     return "\n\n".join(parts)[:2200]  # 인스타 캡션 한도

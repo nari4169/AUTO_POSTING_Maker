@@ -19,13 +19,13 @@ import sys
 
 import requests
 
-from common.config import ConfigError, env, require
+from common.config import ConfigError, require
+from common.disclosure import disclosure_text
 from common.notify import send_mail
 from common.sources import Item, get_items, pick_items
 from common.store import AlreadyHandled, PendingConflict, PostStore
 
 CHANNEL = "telegram"
-DEFAULT_DISCLOSURE = "이 포스팅은 제휴 마케팅 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받을 수 있습니다."
 
 
 class TelegramError(Exception):
@@ -36,7 +36,9 @@ def compose(item: Item) -> str:
     """글 만들기: 제목 + 본문 (+ 링크가 있으면 링크와 대가성 문구)."""
     parts = [p for p in (item.title, item.text) if p]
     if item.link:
-        parts += [item.link, env("AD_DISCLOSURE", DEFAULT_DISCLOSURE) or DEFAULT_DISCLOSURE]
+        parts.append(item.link)
+        if disclosure_text(True):
+            parts.append(disclosure_text(True))
     return "\n\n".join(parts)[:4096]  # 텔레그램 메시지 글자 수 한도
 
 

@@ -333,3 +333,30 @@ def test_extract_code_variants_and_helpful_errors():
         extract_code(auth)                                                    # auth-url 주소를 잘못 붙여 넣은 경우
     with pytest.raises(RuntimeError, match="거절"):
         extract_code("https://e.com/cb?error=access_denied&error_description=User+denied")
+
+
+# ── 대가성 문구 옵션 ─────────────────────────────────────────
+def test_disclosure_option(monkeypatch):
+    from common.config import ConfigError
+    from common.disclosure import disclosure_text
+    monkeypatch.delenv("AD_DISCLOSURE_MODE", raising=False)
+    monkeypatch.delenv("AD_DISCLOSURE", raising=False)
+    assert "수수료" in disclosure_text(True)          # 기본(auto): 링크가 있으면 붙음
+    assert disclosure_text(False) == ""               # 링크가 없으면 안 붙음
+    monkeypatch.setenv("AD_DISCLOSURE", "내 문구")
+    assert disclosure_text(True) == "내 문구"
+    monkeypatch.setenv("AD_DISCLOSURE_MODE", "off")
+    assert disclosure_text(True) == ""                # off: 붙이지 않음
+    monkeypatch.setenv("AD_DISCLOSURE_MODE", "x")
+    with pytest.raises(ConfigError):
+        disclosure_text(True)
+
+
+def test_disclosure_off_in_all_channels(monkeypatch):
+    monkeypatch.setenv("AD_DISCLOSURE_MODE", "off")
+    item = Item(id="1", title="제목", text="본문", link="https://x.test", hashtags=["a"])
+    assert "수수료" not in build_blog(item, use_ai=False).body
+    from reels.post_reels import caption_for
+    assert "수수료" not in caption_for(item, "대본")
+    from threads.content import build_post
+    assert "수수료" not in build_post(item, use_ai=False).reply
